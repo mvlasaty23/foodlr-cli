@@ -1,0 +1,35 @@
+{
+  "name": "foodlr-cli",
+  "version": "1.0.0",
+  "main": "index.js",
+  "author": "Michael Vlasaty <mvlasaty23@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    "start": "ts-node src/index.ts",
+    "build": "yarn run lint && yarn run ts:build",
+    "ts:build": "tsc",
+    "ts:watch": "tsc -w",
+    "lint": "yarn eslint . --ext .js,.jsx,.ts,.tsx",
+    "lint:fix": "prettier src/**/*.{ts,js,css,scss,less,md,html} --write && yarn eslint . --fix --ext .js,.jsx,.ts,.tsx",
+    "format:json": "prettier wiremock/**/*.json --write"
+  },
+  "prettier": {
+    "printWidth": 120,
+    "semi": true,
+    "singleQuote": true,
+    "trailingComma": "es5"
+  },
+  "devDependencies": {
+    "@types/node": "^14.14.36",
+    "@typescript-eslint/eslint-plugin": "^4.19.0",
+    "@typescript-eslint/parser": "^4.19.0",
+    "eslint": "^7.22.0",
+    "eslint-config-prettier": "^8.1.0",
+    "prettier": "^2.2.1",
+    "ts-node": "^9.1.1",
+    "typescript": "^4.2.3"
+  },
+  "dependencies": {
+    "rxjs": "^6.6.6"
+  }
+}
