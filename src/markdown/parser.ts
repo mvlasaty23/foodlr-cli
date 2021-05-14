@@ -1,19 +1,21 @@
 import { groupBy, groupWith } from 'ramda';
+import { Observable } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { Recipe } from '../model';
+import { readFile$ } from '../util';
 
-// section model
 export interface MarkdownItToken {
   type: string;
   tag: string;
-  attrs: [string, string];
-  map: [number, number];
+  attrs: [string, string] | null;
+  map: [number, number] | null;
   nesting: -1 | 0 | 1;
   level: number;
-  children: ReadonlyArray<MarkdownItToken>;
+  children: ReadonlyArray<MarkdownItToken> | null;
   content: string;
   markup: string;
   info: string;
-  meta: Record<string, unknown>;
+  meta: Record<string, unknown> | null;
   block: boolean;
   hidden: boolean;
 }
@@ -21,54 +23,36 @@ export interface MarkdownItToken {
 export type MarkdownItTokens = ReadonlyArray<MarkdownItToken>;
 export type GroupedSections = { [name: string]: MarkdownItTokens[] };
 
-// end section model
-
-// heading_open
-// inline
-// heading_closed
-export function isHeading(last: MarkdownItToken, next: MarkdownItToken): boolean {
-  return !(last.type === 'heading_close') && !(next.type === 'heading_open');
+export function isHeading(prevType: string, nextType: string): boolean {
+  return prevType !== 'heading_close' && nextType !== 'heading_open';
 }
 
-// heading_open
-// inline
-// heading_closed
-// paragraph_open
-// inline
-// paragraph_close
-//
-// OR
-//
-// heading_open
-// inline
-// heading_closed
-// bullet_list_open
-// list_item_open
-// paragraph_open
-// inline
-// paragraph_close
-// list_item_close
-// bullet_list_close
-export function isHeadingWithParagraph(last: MarkdownItToken, next: MarkdownItToken): boolean {
-  return !(last.type === 'paragraph_close') && !(next.type === 'heading_open');
+export function isHeadingWithParagraph(prevType: string, nextType: string): boolean {
+  return prevType !== 'paragraph_close' && nextType !== 'heading_open';
 }
 
-// TODO: test groupWithFunctions
-export function isSection(last: MarkdownItToken, next: MarkdownItToken): boolean {
-  return isHeadingWithParagraph(last, next) || isHeading(last, next);
+export function isSection(prev: string, next: string): boolean {
+  return isHeadingWithParagraph(prev, next) || isHeading(prev, next);
 }
-export function isHeadingAndBulletList(last: MarkdownItToken, next: MarkdownItToken): boolean {
-  return (!(next.type === 'bullet_list_open') && !(last.type === 'heading_open')) || isHeading(last, next);
+function isSectionType(last: MarkdownItToken, next: MarkdownItToken): boolean {
+  return isSection(last.type, next.type);
+}
+
+export function isHeadingAndBulletList(prev: string, next: string): boolean {
+  return (prev !== 'heading_open' && next !== 'bullet_list_open') || isHeading(prev, next);
+}
+function isHeadingAndBulletListType(last: MarkdownItToken, next: MarkdownItToken): boolean {
+  return isHeadingAndBulletList(last.type, next.type);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const md = require('markdown-it')();
-export function parsedMarkdown(markdown: string): MarkdownItTokens {
+function parsedMarkdown(markdown: string): MarkdownItTokens {
   return md.parse(markdown);
 }
 
-export function sections(tokens: MarkdownItTokens): MarkdownItTokens[] {
-  return groupWith(isSection, tokens);
+function sections(tokens: MarkdownItTokens): MarkdownItTokens[] {
+  return groupWith(isSectionType, tokens);
 }
 
 export function groupedSections(sections: MarkdownItTokens[]): GroupedSections {
@@ -116,9 +100,9 @@ export function recipe(groupedSections: GroupedSections): Partial<Recipe> {
         if (isParagraphSection(inlineTokens)) {
           // TODO: add name validation for recipe
           recipe[inlineTokens[0].content.toLocaleLowerCase()] = inlineTokens[1].content;
-        } else if(isBulletlistSection(inlineTokens)) {
+        } else if (isBulletlistSection(inlineTokens)) {
           // bullet list section
-          const [headingTokens, bulletListTokens] = groupWith(isHeadingAndBulletList, section);
+          const [headingTokens, bulletListTokens] = groupWith(isHeadingAndBulletListType, section);
           recipe[sectionNameOf(headingTokens).toLocaleLowerCase()] = inlineTokensOf(bulletListTokens).map(
             (token) => token.content
           );
@@ -129,4 +113,13 @@ export function recipe(groupedSections: GroupedSections): Partial<Recipe> {
     }
   });
   return recipe;
+}
+
+export function readMarkdown$(filename: string): Observable<Partial<Recipe>> {
+  return readFile$(filename, { encoding: 'utf8' }).pipe(
+    map(parsedMarkdown),
+    map(sections),
+    map(groupedSections),
+    map(recipe)
+  );
 }
